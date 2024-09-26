@@ -3,7 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
+use App\Models\User;
+use App\Models\UserAddress;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class OrderController extends Controller
 {
@@ -27,54 +30,43 @@ class OrderController extends Controller
         $this->GooglePayController = $GooglePayController;
     }
 
-    public function addToCart($id)
-    {
-        $product = Product::find($id);
-        $cart = session()->get('cart', []);
-
-        if (isset($cart[$id])) {
-            $cart[$id]['quantity']++;
-        } else {
-            $cart[$id] = [
-                "name" => $product->name,
-                "quantity" => 1,
-                "price" => $product->price,
-                "image" => $product->image
-            ];
-        }
-
-        session()->put('cart', $cart);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Pizza added to cart!'
-        ]);
-    }
-
-    public function showCart(Request $request)
-    {
-        $cart = session()->get('cart');
-        return view('cart', compact('cart'));
-    }
-
-    public function removeFromCart($id)
-    {
-        $cart = session()->get('cart');
-        if (isset($cart[$id])) {
-            unset($cart[$id]);
-            session()->put('cart', $cart);
-        }
-        return redirect()->back()->with('success', 'Product removed from cart!');
-    }
-
     public function checkout(Request $request)
     {
         $cart = session()->get('cart') ?? [];
-        $product_id = $request->query('product_id');
+        $addresses = [];
+        $selectedAddressId = null;
 
+        if (Auth::check()) {
+            // Fetch addresses with the latest one marked as selected by default
+            $addresses = Auth::user()->addresses->toArray();
+            $latestAddress = end($addresses); // Get the latest address
+            $selectedAddressId = $latestAddress['id'];
+
+            // Mark the latest address as selected
+            foreach ($addresses as &$address) {
+                $address['selected_address'] = $address['id'] == $selectedAddressId;
+            }
+        }
+
+        // Update cart items with pricing information
+        $cartData = [];
+        foreach ($cart as $id => $details) {
+            $price = $details['price'];
+            $discountedPrice = $price * 0.8; // Example: 20% discount
+            $cartData[$id] = [
+                'image' => $details['image'],
+                'name' => $details['name'],
+                'quantity' => $details['quantity'],
+                'normal_price' => $price,
+                'discount_price' => $discountedPrice,
+                'is_premium' => is_premium_subscriber(),
+            ];
+        }
+
+        $product_id = $request->query('product_id');
         $product = $product_id ? Product::find($product_id) : null;
 
-        return view('checkout', compact('cart', 'product'));
+        return view('checkout', compact('cartData', 'product', 'addresses', 'selectedAddressId'));
     }
 
     public function addSingleProductToCheckout($id)
@@ -97,12 +89,42 @@ class OrderController extends Controller
         return redirect()->route('checkout');
     }
 
+    public function updateSelectedAddress(Request $request)
+    {
+        $user = Auth::user();
+        $addressId = $request->input('address_id');
+
+        // Reset all addresses to not selected
+        foreach ($user->addresses as $address) {
+            $address->update(['selected_address' => false]);
+        }
+
+        // Mark the selected address as true
+        $selectedAddress = $user->addresses()->where('id', $addressId)->first();
+        $selectedAddress->update(['selected_address' => true]);
+
+        return response()->json($selectedAddress);
+    }
+
     public function processCheckout(Request $request)
     {
-        // Validate the request to ensure a payment method is selected
-        $request->validate([
-            'payment_method' => 'required'
+        // Validate the request data
+        $validatedData = $request->validate([
+            'payment_method' => 'required|string',
+            'name' => 'required|string|max:255',
+            'email' => 'required|email',
+            'address' => 'required|string|max:255',
+            'city' => 'required|string|max:255',
+            'state' => 'required|string|max:255',
+            'zip' => 'required|string|max:10',
+            'sameadr' => 'nullable|boolean',
         ]);
+
+        if (!$validatedData) {
+            return redirect()->back()->withErrors($validatedData)->withInput();
+        }
+
+        $request['user_address_id'] = $this->storeUserAddress($request);
 
         switch ($request->payment_method) {
             case 'credit_card':
@@ -110,7 +132,8 @@ class OrderController extends Controller
             case 'paypal':
                 return $this->paypal->processPaypalCheckout($request);
             case 'google_pay':
-                return $this->GooglePayController->processGooglePayCheckout($request);
+                return view('coming-soon');
+            // return $this->GooglePayController->processGooglePayCheckout($request);
             case 'phone_pay':
                 return $this->phonePeController->processPhonePayCheckout($request);
             case 'razor_pay':
@@ -126,4 +149,42 @@ class OrderController extends Controller
                 return redirect()->back()->with('error', 'Invalid payment method.');
         }
     }
+
+    public function storeUserAddress($request)
+    {
+        $user = User::findOrFail(Auth::id());
+
+        if ($request->has('address_id')) {
+            $orderAddress = UserAddress::where('id', $request->address_id)
+                ->where('user_id', $user->id)
+                ->firstOrFail();
+
+            // Update the existing address with the new data
+            $orderAddress->update([
+                'name' => $request->name,
+                'email' => $request->email,
+                'address' => $request->address,
+                'city' => $request->city,
+                'state' => $request->state,
+                'zip' => $request->zip,
+                'sameadr' => $request->sameadr ?? 0
+            ]);
+
+        } else {
+            // If no address_id is provided, create a new address
+            $orderAddress = UserAddress::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'user_id' => $user->id,
+                'address' => $request->address,
+                'city' => $request->city,
+                'state' => $request->state,
+                'zip' => $request->zip,
+                'sameadr' => $request->sameadr ?? 0
+            ]);
+        }
+
+        return $orderAddress->id;
+    }
+
 }

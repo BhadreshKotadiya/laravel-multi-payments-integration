@@ -15,7 +15,10 @@ class PhonePeController extends Controller
         $user = auth()->user();
 
         foreach ($cart as $item) {
-            $amount += $item['price'] * $item['quantity'];
+            $price = $item['price'];
+            $discountedPrice = $price * 0.8;
+
+            $amount += $discountedPrice * $item['quantity'];
         }
 
         // $merchantId = 'PGTESTPAYUAT';

@@ -3,206 +3,161 @@
 @section('title', 'Checkout')
 
 @section('content')
-    <h3 class="mb-5 mt-5 font-weight-bold">Checkout</h3>
-    <div class="card">
-        <div class="card-body">
-            @include('partials.alert')
-            <h5 class="card-title">Order Summary</h5>
-            @if ($cart)
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Image</th>
-                            <th>Items</th>
-                            <th>Quantity</th>
-                            <th>Price</th>
-                            <th>Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse($cart as $id => $details)
-                            <tr>
-                                <td>
-                                    <img src="{{ asset('pizza/' . $details['image']) }}" alt="">
-                                </td>
-                                <td>{{ $details['name'] }}</td>
-                                <td>{{ $details['quantity'] }}</td>
-                                <td> ₹{{ $details['price'] }}</td>
-                                <td> ₹{{ $details['price'] * $details['quantity'] }}</td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="5">No items in cart</td>
-                            </tr>
-                        @endforelse
-                        <tr>
-                            <td colspan="4" class="text-right"><b>Total:</b></td>
-                            <td> ₹{{ array_sum(array_map(function ($item) {return $item['price'] * $item['quantity'];}, $cart)) }}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+    <h2>Checkout</h2>
 
-                <form action="{{ route('checkout.process') }}" method="POST" class="payment-form p-4 shadow-sm rounded">
-                    @csrf
-                    <h5 class="mt-4 mb-3 text-center">Choose Payment Method</h5>
+    @include('partials.checkout_cart')
+    @include('partials.billing_address')
 
-                    <div class="form-group row">
-                        <div class="col-md-4 mb-3">
-                            <label class="d-flex align-items-center">
-                                <input type="radio" name="payment_method" value="credit_card" data-bg-color="#0000008f"
-                                    class="mr-2" checked>
-                                <img src="{{ asset('assets/Payments/credit_card_logo.jpeg') }}" alt="Credit Card"
-                                    class="payment-logo"> Credit Card
-                            </label>
-                        </div>
-
-                        <div class="col-md-4 mb-3">
-                            <label class="d-flex align-items-center">
-                                <input type="radio" name="payment_method" value="paytm" data-bg-color="#17a2b8ba"
-                                    id="paytm_pay_option" class="mr-2">
-                                <img src="{{ asset('assets/Payments/paytm_logo.png') }}" alt="Paytm Pay"
-                                    class="payment-logo">
-                                Paytm
-                            </label>
-                        </div>
-
-                        <div class="col-md-4 mb-3">
-                            <label class="d-flex align-items-center">
-                                <input type="radio" name="payment_method" value="phone_pay" data-bg-color="#4f2a65cc"
-                                    class="mr-2">
-                                <img src="{{ asset('assets/Payments/phone_pay_logo.png') }}" alt="Phone Pay"
-                                    class="payment-logo">
-                                Phone Pay
-                            </label>
-                        </div>
-
-                        <div class="col-md-4 mb-3">
-                            <label class="d-flex align-items-center">
-                                <input type="radio" name="payment_method" value="paypal" data-bg-color="#1d3aff8f"
-                                    class="mr-2">
-                                <img src="{{ asset('assets/Payments/paypal_logo.png') }}" alt="PayPal"
-                                    class="payment-logo">
-                                PayPal
-                            </label>
-                        </div>
-
-                        <div class="col-md-4 mb-3">
-                            <label class="d-flex align-items-center">
-                                <input type="radio" name="payment_method" value="google_pay" data-bg-color="#4285f463"
-                                    class="mr-2">
-                                <img src="{{ asset('assets/Payments/google_pay_logo.png') }}" alt="Google Pay"
-                                    class="payment-logo">
-                                Google Pay
-                            </label>
-                        </div>
-
-                        <div class="col-md-4 mb-3">
-                            <label class="d-flex align-items-center">
-                                <input type="radio" name="payment_method" value="razor_pay" data-bg-color="#17a2b8ba"
-                                    id="razor_pay_option" class="mr-2">
-                                <img src="{{ asset('assets/Payments/razor_pay_logo.jpeg') }}" alt="Razor Pay"
-                                    class="payment-logo">
-                                Razor Pay
-                            </label>
-                        </div>
-
-                    </div>
-
-                    <button type="button" id="processPayment" class="btn btn-custom btn-block mt-4">Process
-                        Payment</button>
-                </form>
-            @else
-                <table class="table">
-                    <tr>
-                        <td colspan="5">No items in cart</td>
-                    </tr>
-                </table>
-            @endif
-
-        </div>
-    </div>
     @push('scripts')
         <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+        <script src="https://maps.googleapis.com/maps/api/js?key={{ env('GOOGLE_MAPS_API_KEY') }}&callback=initMap" async defer>
+        </script>
 
         <script>
+            let map;
+            let marker;
+            const gujaratBounds = {
+                north: 24.7,
+                south: 20.0,
+                east: 74.3,
+                west: 68.0
+            };
+
+            // Initialize the map and restrict it to Gujarat
+            function initMap() {
+                const gujaratCenter = {
+                    lat: 22.2587,
+                    lng: 71.1924
+                };
+
+                map = new google.maps.Map(document.getElementById('map'), {
+                    center: gujaratCenter,
+                    zoom: 8, // Suitable zoom level to show most of Gujarat
+                    restriction: {
+                        latLngBounds: gujaratBounds, // Restrict the map to Gujarat bounds
+                        strictBounds: true, // Enforce the boundary strictly
+                    },
+                    mapTypeId: 'terrain' // Optional: 'roadmap', 'satellite', 'hybrid', 'terrain'
+                });
+
+                // Add click event listener to the map
+                map.addListener('click', function(event) {
+                    placeMarker(event.latLng);
+                    setLatLng(event.latLng.lat(), event.latLng.lng());
+                });
+            }
+
+            // Function to place a marker on the map
+            function placeMarker(location) {
+                if (marker) {
+                    marker.setPosition(location);
+                } else {
+                    marker = new google.maps.Marker({
+                        position: location,
+                        map: map
+                    });
+                }
+            }
+
+            // Function to set latitude and longitude
+            function setLatLng(lat, lng) {
+                document.getElementById('latitude').value = lat;
+                document.getElementById('longitude').value = lng;
+
+                // Display selected lat/lng on the page
+                document.getElementById('lat-span').textContent = 'Latitude: ' + lat;
+                document.getElementById('lng-span').textContent = 'Longitude: ' + lng;
+            }
             document.getElementById('processPayment').addEventListener('click', function(e) {
                 e.preventDefault();
+                const selectedPaymentMethod = document.querySelector('input[name="payment_method"]:checked');
 
-                // Get the selected payment method
-                var selectedMethod = document.querySelector('input[name="payment_method"]:checked').value;
-
-                // If Razorpay is selected, handle Razorpay payment
-                if (selectedMethod === 'razor_pay') {
-                    var cart = @json($cart); // Cart is an object, not an array
-                    var cartItems = Object.values(cart);
-
-                    if (Array.isArray(cartItems) && cartItems.length > 0) {
-                        var totalAmount = cartItems.reduce(function(total, item) {
-                            return total + (item['price'] * item['quantity']);
-                        }, 0) * 100; // Total in paisa
-
-                        var products = cartItems.map(function(item) {
-                            return item['name'] + " (Qty: " + item['quantity'] + ")";
-                        }).join(', ');
-
-                        var options = {
-                            "key": "{{ env('RAZORPAY_KEY') }}",
-                            "amount": totalAmount, // Amount in paisa
-                            "currency": "INR",
-                            "name": "Pizza Palooza",
-                            "description": products,
-                            "image": "https://as2.ftcdn.net/v2/jpg/03/21/33/93/1000_F_321339306_3UStnILdqK6xNbduTBbYido78UytJnzC.jpg",
-                            "handler": function(response) {
-                                // Set Razorpay payment ID in hidden field
-                                var form = document.querySelector('.payment-form');
-                                var input = document.createElement('input');
-                                input.type = 'hidden';
-                                input.name = 'razorpay_payment_id';
-                                input.value = response.razorpay_payment_id;
-                                form.appendChild(input);
-
-                                // Submit the form after successful Razorpay payment
-                                form.submit();
-                            },
-                            "prefill": {
-                                "name": "{{ auth()->user()->name ?? 'Guest' }}",
-                                "email": "{{ auth()->user()->email ?? 'guest@example.com' }}"
-                            },
-                            "theme": {
-                                "color": "#ff7529"
-                            }
-                        };
-
-                        var rzp1 = new Razorpay(options);
-                        rzp1.open();
-                    } else {
-                        alert('Cart is empty or not a valid array.');
-                    }
+                if (!selectedPaymentMethod) {
+                    document.getElementById('error-message').style.display = 'block';
                 } else {
-                    // For other payment methods, submit the form normally
-                    document.querySelector('.payment-form').submit();
+                    document.getElementById('error-message').style.display = 'none';
+
+                    if (selectedPaymentMethod.value === 'razor_pay') {
+                        var cart = @json($cartData); // Cart is an object, not an array
+                        var cartItems = Object.values(cart);
+
+                        if (Array.isArray(cartItems) && cartItems.length > 0) {
+                            var totalAmount = cartItems.reduce(function(total, item) {
+                                var price = item['is_premium'] ? item['discount_price'] : item['normal_price'];
+                                return total + (price * item['quantity']);
+                            }, 0) * 100; // Total in paisa
+
+                            var products = cartItems.map(function(item) {
+                                return item['name'] + " (Qty: " + item['quantity'] + ")";
+                            }).join(', ');
+
+                            var options = {
+                                "key": "{{ env('RAZORPAY_KEY') }}",
+                                "amount": totalAmount, // Amount in paisa
+                                "currency": "INR",
+                                "name": "Pizza Palooza",
+                                "description": products,
+                                "image": "https://as2.ftcdn.net/v2/jpg/03/21/33/93/1000_F_321339315_vNBRuxkrNsmGMVV7PjoXPul3OhzuL8dd.jpg",
+                                "handler": function(response) {
+                                    document.querySelector('.payment-form').submit();
+                                },
+                                "prefill": {
+                                    "name": document.getElementById('fname').value,
+                                    "email": document.getElementById('email').value,
+                                    "contact": "" // Add user phone number if available
+                                }
+                            };
+
+                            var rzp1 = new Razorpay(options);
+                            rzp1.open();
+                        }
+                    } else {
+                        document.querySelector('.payment-form').submit();
+                    }
                 }
             });
 
-
-            //For Bg color change
-            document.addEventListener('DOMContentLoaded', function() {
-                var paymentForm = document.querySelector('.payment-form');
-                console.log(paymentForm);
-                var paymentRadios = document.querySelectorAll('input[name="payment_method"]');
-
-                paymentRadios.forEach(function(radio) {
-                    radio.addEventListener('change', function() {
-                        var bgColor = this.getAttribute('data-bg-color');
-                        paymentForm.style.backgroundColor = bgColor;
-                    });
+            document.querySelectorAll('.payment-card').forEach(card => {
+                card.addEventListener('click', function() {
+                    document.querySelectorAll('.payment-card').forEach(c => c.classList.remove('selected'));
+                    this.classList.add('selected');
+                    let bgColor = this.getAttribute('data-bg-color');
+                    this.style.setProperty('--bg-color', bgColor);
+                    this.querySelector('.payment-radio').checked = true;
                 });
+            });
 
-                var checkedRadio = document.querySelector('input[name="payment_method"]:checked');
-                if (checkedRadio) {
-                    paymentForm.style.backgroundColor = checkedRadio.getAttribute('data-bg-color');
-                }
+            function selectAddress(addressId) {
+                $.ajax({
+                    url: '/update-selected-address', // Define this route in your backend
+                    method: 'POST',
+                    data: {
+                        _token: $('input[name=_token]').val(),
+                        address_id: addressId
+                    },
+                    success: function(response) {
+                        // Populate form fields with the selected address details
+                        $('#address_id').val(response.id);
+                        $('#name').val(response.name);
+                        $('#email').val(response.email);
+                        $('#address').val(response.address);
+                        $('#city').val(response.city);
+                        $('#state').val(response.state);
+                        $('#zip').val(response.zip);
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Failed to update the selected address:', error);
+                    }
+                });
+            }
+
+            document.getElementById('resetFormLink').addEventListener('click', function() {
+                document.getElementById('name').value = '';
+                document.getElementById('email').value = '';
+                document.getElementById('address').value = '';
+                document.getElementById('city').value = '';
+                document.getElementById('state').value = '';
+                document.getElementById('zip').value = '';
             });
         </script>
     @endpush

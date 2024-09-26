@@ -23,7 +23,10 @@ class CardPaymentController extends Controller
         $line_items = [];
 
         foreach ($cart as $item) {
-            $total += $item['price'] * $item['quantity'];
+            $price = $item['price'];
+            $discountedPrice = $price * 0.8;
+
+            $total += $discountedPrice * $item['quantity'];
             $line_items[] = [
                 'price_data' => [
                     'currency' => 'inr',
@@ -31,7 +34,7 @@ class CardPaymentController extends Controller
                         'name' => $item['name'],
 
                     ],
-                    'unit_amount' => $item['price'] * 100, // Convert to cents
+                    'unit_amount' => $discountedPrice * 100, // Convert to cents
                 ],
                 'quantity' => $item['quantity'],
             ];
@@ -61,6 +64,7 @@ class CardPaymentController extends Controller
 
         $order = Order::create([
             'user_id' => auth()->user()->id,
+            'user_address_id' => $request->user_address_id,
             'status' => 'unpaid',
             'total' => $total,
             'session_id' => $session->id
@@ -70,7 +74,7 @@ class CardPaymentController extends Controller
             $order->items()->create([
                 'product_id' => $id,
                 'quantity' => $details['quantity'],
-                'price' => $details['price']
+                'price' => $details['price'] * 0.8,
             ]);
         }
         return redirect()->away($session->url);

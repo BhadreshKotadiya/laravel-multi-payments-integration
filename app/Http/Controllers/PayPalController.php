@@ -18,7 +18,10 @@ class PayPalController extends Controller
         $total = 0;
 
         foreach ($cart as $item) {
-            $total += $item['price'] * $item['quantity'];
+            $price = $item['price'];
+            $discountedPrice = $price * 0.8;
+
+            $total += $discountedPrice * $item['quantity'];
         }
 
         $response = $provider->createOrder([

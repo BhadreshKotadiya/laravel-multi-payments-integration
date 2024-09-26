@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\CartController;
+use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\PhonePeController;
 use App\Http\Controllers\RazorPayController;
 use App\Http\Controllers\RegisterController;
@@ -9,6 +11,7 @@ use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PayPalController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\SubscriptionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -20,23 +23,40 @@ use App\Http\Controllers\ProfileController;
 | be assigned to the "web" middleware group. Make something great!
 |
 */
+
+Route::get('/index', function () {
+    return view('index');
+});
+
 Route::get('login', [loginController::class, 'showLogin'])->name('show.login');
 Route::post('/register', [RegisterController::class, 'register'])->name('register');
 Route::post('login', [loginController::class, 'login'])->name('login');
 
 // Product Routes
 Route::get('/', [ProductController::class, 'index'])->name('product.index');
+Route::get('/product/{id}', [ProductController::class, 'show'])->name('product.show');
+
 
 // Cart Routes
-Route::get('cart', [OrderController::class, 'showCart'])->name('cart.show');
-Route::get('cart/add/{id}', [OrderController::class, 'addToCart'])->name('cart.add');
-Route::get('cart/remove/{id}', [OrderController::class, 'removeFromCart'])->name('cart.remove');
+Route::get('cart', [CartController::class, 'showCart'])->name('cart.show');
+Route::get('cart/add/{id}', [CartController::class, 'addToCart'])->name('cart.add');
+Route::get('cart/remove/{id}', [CartController::class, 'removeFromCart'])->name('cart.remove');
+Route::post('/cart/update', [CartController::class, 'update'])->name('cart.update');
+
+// checkout Routes
 Route::get('checkout/{id?}', [OrderController::class, 'checkout'])->name('checkout');
 Route::get('checkout/add/{id}', [OrderController::class, 'addSingleProductToCheckout'])->name('checkout.addSingle');
 
 
+
+
+
+
 // Restrict checkout and payment to logged-in users only
 Route::middleware(['auth'])->group(function () {
+
+    Route::post('/add-address', [OrderController::class, 'addAddress'])->name('addAddress');
+    Route::post('/update-selected-address', [OrderController::class, 'updateSelectedAddress']);
 
     //Payment with: Card
     Route::post('checkout', [OrderController::class, 'processCheckout'])->name('checkout.process');
@@ -55,7 +75,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('cancel-transaction', [PayPalController::class, 'cancelTransaction'])->name('cancelTransaction');
 
     //Google pay and paytm pending
-
+    Route::get('/subscriptions', [SubscriptionController::class, 'showSubscriptions'])->name('subscriptions.index');
+    Route::post('/subscription/checkout', [SubscriptionController::class, 'checkout'])->name('subscription.checkout');
+    Route::get('/subscription/success', [SubscriptionController::class, 'success'])->name('subscription.success');
+    Route::get('/subscription/cancel', [SubscriptionController::class, 'cancel'])->name('subscription.cancel');
 
     // Profile and logout routes
     Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');

@@ -12,4 +12,11 @@ class ProductController extends Controller
         $products = Product::all();
         return view('products', compact('products'));
     }
+
+    public function show($id)
+    {
+        $product = Product::findOrFail($id);
+        $isSubscribed = is_premium_subscriber();
+        return view('product.details', compact('product', 'isSubscribed'));
+    }
 }
